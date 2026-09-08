@@ -1,0 +1,19 @@
+# Skutečná konfigurace obsahuje hesla/tokeny — nikdy necommitovat.
+collector/config.yml
+
+# Python
+__pycache__/
+*.pyc
+
+# Zdrojová tabulka s osobními spotřebami — použitá jednorázově pro fve-portal seed,
+# není potřeba pro běh collectoru.
+*.xlsx
+
+# macOS
+.DS_Store
+
+# fve-portal je samostatný git repozitář (vlastní GitHub repo)
+/fve-portal/
+
+# lokální SQLite (historicky, dnes se nepoužívá — data jdou přímo do fve-portal)
+db/*.db

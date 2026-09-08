@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────
+# FVE Collector — konfigurace
+# Zkopíruj tento soubor jako config.yml a vyplň všechny hodnoty
+# označené DOPLŇ_ZDE. Skutečný config.yml se necommituje (viz .gitignore).
+# ─────────────────────────────────────────────────────────────
+
+fve_portal:
+  api_url: "http://DOPLŇ_ZDE:8787/api/data"    # IP NASu + port fve-portal kontejneru
+
+influxdb:
+  url: "http://DOPLŇ_ZDE:8086"        # IP nebo hostname InfluxDB kontejneru (jen pro čtení)
+  token: "DOPLŇ_ZDE"                   # InfluxDB API token (read-only stačí)
+  org: "DOPLŇ_ZDE"                     # název organizace
+  bucket: "homeassistant"              # bucket, do kterého zapisuje Home Assistant
+
+deltagreen:
+  email: "DOPLŇ_ZDE"                   # přihlašovací email na moje.deltagreen.cz
+  password: "DOPLŇ_ZDE"                # heslo
+  consumption_id: "DOPLŇ_ZDE"          # ID odběrného místa — nákup (/pdt/<id>/consumption)
+  production_id: "DOPLŇ_ZDE"           # ID odběrného místa — výroba (/pdt/<id>/production)
+
+scheduler:
+  day_of_month: 3                      # kdy v měsíci spustit sběr za předchozí měsíc
+  hour: 6
+  timezone: "Europe/Prague"
+
+# Od kterého měsíce se má dobrat historie při jednorázovém backfillu.
+backfill_start: "2026-01-01"

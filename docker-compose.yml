@@ -1,0 +1,7 @@
+services:
+  fve-collector:
+    build: ./collector
+    container_name: fve-collector
+    restart: unless-stopped
+    volumes:
+      - ./collector/config.yml:/app/config.yml:ro

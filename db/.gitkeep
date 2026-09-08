@@ -1,0 +1,2 @@
+# Tento adresář je určen pro SQLite databázi fve.db
+# Soubor fve.db se vytvoří automaticky při prvním spuštění collectoru
