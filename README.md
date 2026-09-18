@@ -81,6 +81,8 @@ cd collector && python -m unittest discover tests
 
 ## Krok 3 — Nasazení (trvalý běh)
 
+Konkrétní postup pro Synology NAS (pořadí, záloha, ověření) je v [DEPLOY.md](DEPLOY.md).
+
 ```bash
 docker compose up -d --build
 ```
