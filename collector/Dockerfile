@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# Chromium pro Selenium (ČEZ PND scraper)
+# Chromium pro Selenium (DeltaGreen scraper)
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \

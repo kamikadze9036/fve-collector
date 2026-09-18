@@ -10,14 +10,14 @@ Co bylo ověřeno:
 - `npx drizzle-kit check` → hlásí OK, ale je to zavádějící (viz první bod)
 - dry-run `drizzle-kit generate` do dočasné kopie → potvrdil chybějící snapshot
 
-Doporučené pořadí oprav: 1 → 2 → 3 + 4 → 5 → 6 → 7, zbytek podle chuti.
+Stav: body 1–7 opravené 2026-09-18 (collector i fve-portal, viz git log). Body 8–19 zůstávají otevřené.
 
 ---
 
 ## Kritické a vysoké
 
 ### 1. Chybí `fve-portal/drizzle/meta/0002_snapshot.json`
-- [ ] Opravit
+- [x] Opraveno 2026-09-18
 
 Migrace `0002_measurement_workflow.sql` byla psaná ručně a nemá snapshot v `drizzle/meta/`
 (existují jen `0000_snapshot.json` a `0001_snapshot.json`). Dry-run ukázal, že příští
@@ -33,7 +33,7 @@ Postup opravy:
 4. Znovu spustit dry-run `generate` a ověřit, že už nic negeneruje.
 
 ### 2. Tajemství se zapékají do Docker image collectoru
-- [ ] Opravit
+- [x] Opraveno 2026-09-18
 
 `collector/Dockerfile:14` dělá `COPY . .` a collector nemá `.dockerignore`, takže
 `config.yml` (heslo DeltaGreen, InfluxDB token) skončí ve vrstvě image. Compose ho
@@ -47,7 +47,7 @@ __pycache__/
 ```
 
 ### 3. Zápis přes `/api/data` přepisuje existující data nulami
-- [ ] Opravit
+- [x] Opraveno 2026-09-18
 
 - `fve-portal/app/api/data/route.ts:55` dělá upsert se `set: values`, kde jsou všechny
   sloupce včetně `null`. Collector posílá `meterNtKwh`, `meterVtKwh`,
@@ -62,7 +62,7 @@ Oprava: v obou upsertech vynechat klíče s hodnotou `null` (update jen dodanýc
 zdroj zapisovat jen pro ne-null pole, opravit README collectoru a odstranit mrtvou větev.
 
 ### 4. Chybějící hodnoty z DeltaGreen se maskují na nulu
-- [ ] Opravit
+- [x] Opraveno 2026-09-18
 
 `collector/deltagreen.py:203-210` dělá `or 0.0`, takže nenalezený sloupec se uloží jako
 0 Kč / 0 kWh místo chyby nebo `null`. V kombinaci s bodem 3 jde o tichou korupci dat.
@@ -71,7 +71,7 @@ Oprava: pro povinné sloupce vyhodit `RuntimeError`, pro volitelné poslat `None
 (portál `null` akceptuje).
 
 ### 5. Zmeškaný měsíc se nikdy nedožene
-- [ ] Opravit
+- [x] Opraveno 2026-09-18
 
 APScheduler drží joby jen v paměti a výchozí `misfire_grace_time` je 1 s. Když je
 kontejner 3. v měsíci v 6:00 dole nebo DeltaGreen selže, měsíc se ztratí a další běh
@@ -87,7 +87,7 @@ Oprava: při každém běhu stáhnout `GET /api/data`, spočítat chybějící o
 ## Střední
 
 ### 6. InfluxDB okno na hranici měsíce
-- [ ] Opravit
+- [x] Opraveno 2026-09-18
 
 `collector/influx_ha.py:47` používá `aggregateWindow(every: 1mo)` v UTC, ale rozsah je
 v Europe/Prague. Vzniknou dvě řádky (1 až 2 hodinový střípek na začátku měsíce plus
@@ -98,7 +98,7 @@ Oprava: nahradit `aggregateWindow` + `pivot` za `|> spread()` přes celý rozsah
 `friendly_name` z tagu záznamu (`record.values["friendly_name"]`).
 
 ### 7. DeltaGreen parser je křehký
-- [ ] Opravit / ověřit na prvním ostrém běhu
+- [x] Opraveno 2026-09-18, ověřit na prvním ostrém běhu
 
 - Sloupce se berou podle pozice (`collector/deltagreen.py:203-210`), ne podle hlavičky tabulky.
 - `_parse_number` (`deltagreen.py:118`) neumí unicode minus (U+2212) ani tečku jako

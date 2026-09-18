@@ -3,14 +3,14 @@ InfluxDB (Home Assistant) collector — čte měsíční přírůstky kumulativn
 čítačů (Total PV Generation, Meter Total Energy import/export), které HA
 zapisuje lokálně z měniče/elektroměru (bez závislosti na SEMS cloudu).
 
-Ekvivalent Grafana Flux dotazu "Statistika FVE", omezený na jeden konkrétní
-kalendářní měsíc.
+Přírůstek = spread() (max − min) čítače přes celý kalendářní měsíc
+v Europe/Prague. Záměrně bez aggregateWindow: to dělí okna podle UTC
+a na hranici měsíce vznikal 1–2hodinový střípek, který se zahazoval.
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
-from calendar import monthrange
 
 from influxdb_client import InfluxDBClient
 
@@ -26,13 +26,19 @@ FIELDS = {
 
 
 def _month_bounds_utc(year: int, month: int) -> tuple[str, str]:
-    """Vrátí (start, stop) daného měsíce v Europe/Prague, převedené na RFC3339 UTC."""
+    """
+    Vrátí (start, stop) kalendářního měsíce v Europe/Prague jako RFC3339 UTC.
+    `stop` je začátek následujícího měsíce (Flux range má stop exkluzivní).
+    """
     start_local = datetime(year, month, 1, tzinfo=PRAGUE)
-    last_day = monthrange(year, month)[1]
-    stop_local = datetime(year, month, last_day, 23, 59, 59, tzinfo=PRAGUE)
+    if month == 12:
+        stop_local = datetime(year + 1, 1, 1, tzinfo=PRAGUE)
+    else:
+        stop_local = datetime(year, month + 1, 1, tzinfo=PRAGUE)
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
     return (
-        start_local.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        stop_local.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        start_local.astimezone(timezone.utc).strftime(fmt),
+        stop_local.astimezone(timezone.utc).strftime(fmt),
     )
 
 
@@ -44,13 +50,13 @@ from(bucket: "{bucket}")
   |> filter(fn: (r) => r["_measurement"] == "kWh")
   |> filter(fn: (r) => r["_field"] == "value")
   |> filter(fn: (r) => {friendly_names})
-  |> aggregateWindow(every: 1mo, fn: spread, createEmpty: false)
-  |> pivot(rowKey:["_time"], columnKey: ["friendly_name"], valueColumn: "_value")
+  |> spread()
 '''
 
 
 def fetch_month(config: dict, target: date) -> dict:
-    """Vrátí {"pvGenerationKwh", "gridExportKwh", "pvPurchaseKwh"} za měsíc `target`."""
+    """Vrátí {"pvGenerationKwh", "gridExportKwh", "pvPurchaseKwh"} za měsíc `target`.
+    Chybějící čítač vrací jako None (fve-portal None/null ignoruje)."""
     start, stop = _month_bounds_utc(target.year, target.month)
     cfg = config["influxdb"]
 
@@ -65,10 +71,13 @@ def fetch_month(config: dict, target: date) -> dict:
     result = {v: None for v in FIELDS.values()}
     for table in tables:
         for record in table.records:
-            for influx_name, field in FIELDS.items():
-                value = record.values.get(influx_name)
-                if value is not None:
-                    result[field] = round(float(value), 2)
+            field = FIELDS.get(record.values.get("friendly_name"))
+            value = record.get_value()
+            if field is None or value is None:
+                continue
+            if result[field] is not None:
+                logger.warning("InfluxDB: %s má víc sérií (více entit se stejným friendly_name?), beru poslední", field)
+            result[field] = round(float(value), 2)
 
     missing = [k for k, v in result.items() if v is None]
     if missing:

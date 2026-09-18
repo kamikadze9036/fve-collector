@@ -11,11 +11,13 @@ fve-collector/
 ├── docker-compose.yml
 ├── collector/
 │   ├── Dockerfile
+│   ├── .dockerignore       ← config.yml se do image nikdy nekopíruje
 │   ├── requirements.txt
 │   ├── config.yml          ← ⚠️  VYPLŇ PŘED SPUŠTĚNÍM
-│   ├── main.py             ← scheduler + orchestrace (vstupní bod)
+│   ├── main.py             ← scheduler + dohledání chybějících měsíců (vstupní bod)
 │   ├── deltagreen.py       ← DeltaGreen — odběr/dodávka, náklady na nákup, tržby z prodeje
-│   └── influx_ha.py        ← InfluxDB (Home Assistant) — výroba FVE, přetok/nákup
+│   ├── influx_ha.py        ← InfluxDB (Home Assistant) — výroba FVE, přetok/nákup
+│   └── tests/              ← unit testy parseru a výpočtů (bez sítě)
 └── fve-portal/             ← samostatná Next.js dashboard aplikace (vlastní nasazení)
 ```
 
@@ -55,16 +57,27 @@ Otevři `collector/config.yml` a doplň všechny hodnoty označené `DOPLŇ_ZDE`
 | `deltagreen.email` / `password` | Přihlašovací údaje na moje.deltagreen.cz |
 | `deltagreen.consumption_id` / `production_id` | ID z URL `/pdt/<id>/consumption` a `/pdt/<id>/production` |
 
-## Krok 2 — Jednorázový backfill historie
+## Krok 2 — Dohledání chybějících měsíců
 
-Protože collector nikdy předtím reálně neběžel, po nastavení `config.yml` spusť
-jednorázově dobrání historie od `backfill_start` do posledního uplynulého měsíce:
+Collector si při každém startu kontejneru a při každém měsíčním běhu stáhne
+z fve-portal seznam existujících období a doplní všechny měsíce od
+`backfill_start` do posledního uplynulého měsíce, které tam chybí. Zmeškaný běh
+(výpadek NASu, chyba DeltaGreen) se tedy dožene sám.
+
+Měsíc se považuje za hotový, když ve fve-portal existuje záznam za dané období,
+včetně řádků importovaných ze sešitu. Pokud chceš historii doplnit ručně mimo
+scheduler:
 
 ```bash
 docker compose run --rm fve-collector python main.py backfill
 ```
 
-Chybu u jednoho měsíce backfill nezastaví — pokračuje dál a chybu jen zaloguje.
+Chybu u jednoho měsíce dohledání nezastaví — pokračuje dál, chybu zaloguje a
+měsíc zkusí znovu při příštím běhu. Testy parseru jdou spustit bez sítě:
+
+```bash
+cd collector && python -m unittest discover tests
+```
 
 ## Krok 3 — Nasazení (trvalý běh)
 
@@ -81,11 +94,15 @@ zpracuje předchozí kalendářní měsíc.
 docker compose logs -f fve-collector
 ```
 
-Ruční spuštění jednoho konkrétního měsíce (např. pro test):
+Vynucené zpracování jednoho konkrétního měsíce (např. pro test, nebo když chceš
+přepsat hodnoty importované ze sešitu):
 
 ```bash
 docker compose run --rm fve-collector python main.py 2026-08
 ```
+
+Přepíšou se jen hodnoty, které collector reálně sebral. Pole, která nepošle
+(stav elektroměru, chybějící čítač v InfluxDB), zůstanou ve fve-portal beze změny.
 
 ## ⚠️ Poznámky
 
@@ -95,5 +112,12 @@ docker compose run --rm fve-collector python main.py 2026-08
   měsíc, ne aktuální.
 - SEMS API se už nepoužívá (nahrazeno InfluxDB) a OTE-ČR spotové ceny se nesbírají
   (fve-portal pro ně nemá tabulku).
-- Zápis do fve-portal je jednorázový POST za měsíc (žádný upsert) — pokud záznam
-  za dané období už existuje, collector to jen zaloguje a pokračuje.
+- Zápis do fve-portal je POST za měsíc. Endpoint `/api/data` dělá upsert, ale
+  `null`/chybějící pole nikdy nepřepisuje. Automatický běh se existujícím měsícům
+  vyhýbá (viz Krok 2), přepsat je jde jen ručně přes `python main.py YYYY-MM`.
+- Když DeltaGreen za daný měsíc ještě nemá vyúčtování (prázdná spotřeba, výroba
+  nebo platba), collector měsíc nezapíše a zkusí to při příštím běhu. Chybět smí
+  jen „Vyrovnávání sítě“.
+- Sloupce tabulky DeltaGreen se hledají podle textu hlavičky. Když DeltaGreen
+  hlavičku přejmenuje, collector skončí chybou se seznamem nalezených hlaviček
+  (oprava v `CONSUMPTION_COLUMNS` / `PRODUCTION_COLUMNS` v `deltagreen.py`).
